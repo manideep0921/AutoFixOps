@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # ⚡ AutoFixOps v2 — AI-Powered Environment Debugging Assistant
 
 A full-stack AI-assisted debugging platform using the **Anthropic Claude API** for dynamic
@@ -203,4 +204,3 @@ autofixops/
 | Frontend | HTML5, CSS3, Vanilla JS |
 | Templating | Jinja2 |
 | Container | Docker |
-
