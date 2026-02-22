@@ -1,5 +1,5 @@
 <<<<<<< HEAD
-# ⚡ AutoFixOps v2 — AI-Powered Environment Debugging Assistant
+# ⚡ AutoFixOps — AI-Powered Environment Debugging Assistant
 
 A full-stack AI-assisted debugging platform using the **Anthropic Claude API** for dynamic
 LLM-powered terminal error analysis, safe command execution, and a self-healing feedback loop.
