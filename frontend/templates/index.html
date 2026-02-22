@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>AutoFixOps v2 — AI Debugging</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com"/>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet"/>
+    <link rel="stylesheet" href="/static/style.css"/>
+</head>
+<body>
+
+<!-- ── HEADER ─────────────────────────────── -->
+<header>
+    <div class="header-inner">
+        <div class="brand">
+            <div class="brand-mark">
+                <span class="brand-icon">⚡</span>
+                <div class="brand-text">
+                    <span class="brand-name">AutoFixOps</span>
+                    <span class="brand-version">v2.0 · Claude AI</span>
+                </div>
+            </div>
+            <div id="aiStatus" class="ai-badge checking">
+                <span class="pulse-dot"></span>
+                <span class="ai-label">Checking AI…</span>
+            </div>
+        </div>
+        <p class="tagline">Paste any terminal error. Claude reasons through it dynamically.</p>
+    </div>
+</header>
+
+<!-- ── MAIN ───────────────────────────────── -->
+<main>
+
+    <!-- INPUT PANEL -->
+    <div class="panel input-panel">
+        <div class="panel-label">
+            <span class="label-num">01</span>
+            <span>ERROR LOG INPUT</span>
+        </div>
+
+        <div class="context-row">
+            <label for="contextInput">Context (optional)</label>
+            <input id="contextInput" type="text"
+                placeholder="e.g. Python 3.11, Ubuntu 22.04, inside Docker container, FastAPI project"/>
+        </div>
+
+        <div class="log-input-wrapper">
+            <textarea id="logInput"
+                placeholder="$ python app.py&#10;Traceback (most recent call last):&#10;  File &quot;app.py&quot;, line 4&#10;    ModuleNotFoundError: No module named 'fastapi'&#10;&#10;Paste any error — Python, Docker, npm, k8s, database…"></textarea>
+            <div class="log-gutter">
+                <span class="gutter-label">STDIN</span>
+            </div>
+        </div>
+
+        <div class="input-actions">
+            <button id="analyzeBtn" class="btn-primary" onclick="runAnalysis()">
+                <span class="btn-icon">◈</span>
+                <span id="btnLabel">Run Analysis</span>
+                <span id="btnSpinner" class="btn-spinner hidden"></span>
+            </button>
+            <button class="btn-ghost" onclick="loadExample()">Load Example</button>
+            <button class="btn-ghost" onclick="clearAll()">Clear</button>
+        </div>
+    </div>
+
+    <!-- ERROR BANNER -->
+    <div id="errorBanner" class="error-banner hidden">
+        <span class="error-icon">⚠</span>
+        <span id="errorMsg"></span>
+    </div>
+
+    <!-- RESULTS ──────────────────────────── -->
+    <div id="results" class="results hidden">
+
+        <!-- META ROW -->
+        <div class="meta-strip">
+            <div class="meta-cell">
+                <span class="meta-key">TYPE</span>
+                <span id="rType" class="meta-val"></span>
+            </div>
+            <div class="meta-cell">
+                <span class="meta-key">CATEGORY</span>
+                <span id="rCat" class="meta-val cat-badge"></span>
+            </div>
+            <div class="meta-cell">
+                <span class="meta-key">SEVERITY</span>
+                <span id="rSev" class="meta-val sev-badge"></span>
+            </div>
+            <div class="meta-cell">
+                <span class="meta-key">AI CONFIDENCE</span>
+                <span id="rConf" class="meta-val conf-val"></span>
+            </div>
+            <div class="meta-cell">
+                <span class="meta-key">MODEL</span>
+                <span id="rModel" class="meta-val model-val"></span>
+            </div>
+        </div>
+
+        <!-- REASONING SUMMARY — curated by Claude, internal reasoning hidden -->
+        <div class="panel reasoning-panel">
+            <div class="panel-label">
+                <span class="label-num">02</span>
+                <span>AI REASONING SUMMARY</span>
+                <span class="live-tag">CURATED · INTERNAL REASONING HIDDEN</span>
+            </div>
+            <div id="reasoningTrace" class="reasoning-content"></div>
+        </div>
+
+        <!-- ROOT CAUSE + EXPLANATION -->
+        <div class="two-col">
+            <div class="panel">
+                <div class="panel-label">
+                    <span class="label-num">03</span>
+                    <span>ROOT CAUSE</span>
+                </div>
+                <p id="rCause" class="panel-body"></p>
+            </div>
+            <div class="panel">
+                <div class="panel-label">
+                    <span class="label-num">04</span>
+                    <span>EXPLANATION</span>
+                </div>
+                <p id="rExplain" class="panel-body"></p>
+            </div>
+        </div>
+
+        <!-- FIX STEPS -->
+        <div class="panel">
+            <div class="panel-label">
+                <span class="label-num">05</span>
+                <span>DYNAMIC FIX STEPS</span>
+                <span class="ai-gen-tag">AI GENERATED</span>
+            </div>
+            <ol id="rFix" class="fix-list"></ol>
+        </div>
+
+        <!-- SAFE COMMANDS + EXECUTION -->
+        <div class="panel exec-panel">
+            <div class="panel-label">
+                <span class="label-num">06</span>
+                <span>SAFE DIAGNOSTIC COMMANDS</span>
+                <span class="exec-tag">AUTO-EXECUTABLE</span>
+            </div>
+            <div id="rCommands" class="commands-list"></div>
+            <div class="exec-actions">
+                <button class="btn-exec" id="runSafeBtn" onclick="executeSafeCommands()">
+                    <span>▶ Run Diagnostics</span>
+                </button>
+                <span class="exec-note">Only whitelisted read-only commands. No destructive operations.</span>
+            </div>
+            <div id="execResults" class="exec-results hidden"></div>
+        </div>
+
+        <!-- FEEDBACK LOOP -->
+        <div class="panel feedback-panel">
+            <div class="panel-label">
+                <span class="label-num">07</span>
+                <span>SELF-HEALING FEEDBACK LOOP</span>
+            </div>
+            <p class="panel-hint">Applied a fix? Paste the new terminal output to let Claude evaluate if it worked.</p>
+            <textarea id="newLogInput" placeholder="Paste the new output after attempting the fix…"></textarea>
+            <button class="btn-feedback" onclick="runFeedbackLoop()">
+                <span>↻ Evaluate Fix</span>
+            </button>
+            <div id="feedbackResult" class="feedback-result hidden"></div>
+        </div>
+
+        <!-- PREVENTION -->
+        <div class="panel prevention-panel">
+            <div class="panel-label">
+                <span class="label-num">08</span>
+                <span>PREVENTION STRATEGY</span>
+            </div>
+            <ul id="rPrevention" class="prevention-list"></ul>
+        </div>
+
+    </div>
+
+    <!-- METRICS DASHBOARD -->
+    <div class="panel metrics-panel" id="metricsPanel">
+        <div class="panel-label">
+            <span class="label-num">00</span>
+            <span>LIVE SYSTEM METRICS</span>
+            <span class="metrics-tag">REAL-TIME</span>
+            <button class="metrics-refresh-btn" onclick="refreshMetrics()" title="Refresh">↻</button>
+        </div>
+        <div class="metrics-grid" id="metricsGrid">
+            <div class="metric-tile">
+                <span class="metric-num" id="mAnalyses">—</span>
+                <span class="metric-label">Analyses Run</span>
+            </div>
+            <div class="metric-tile">
+                <span class="metric-num" id="mCommands">—</span>
+                <span class="metric-label">Commands Executed</span>
+            </div>
+            <div class="metric-tile">
+                <span class="metric-num" id="mFeedback">—</span>
+                <span class="metric-label">Feedback Evals</span>
+            </div>
+            <div class="metric-tile">
+                <span class="metric-num" id="mFixRate">—</span>
+                <span class="metric-label">Fix Success Rate</span>
+            </div>
+            <div class="metric-tile">
+                <span class="metric-num" id="mP50">—</span>
+                <span class="metric-label">p50 Latency</span>
+            </div>
+            <div class="metric-tile">
+                <span class="metric-num" id="mP95">—</span>
+                <span class="metric-label">p95 Latency</span>
+            </div>
+            <div class="metric-tile">
+                <span class="metric-num" id="mUptime">—</span>
+                <span class="metric-label">Uptime</span>
+            </div>
+            <div class="metric-tile">
+                <span class="metric-num" id="mErrRate">—</span>
+                <span class="metric-label">API Error Rate</span>
+            </div>
+        </div>
+        <div class="metrics-breakdown" id="metricsBreakdown"></div>
+
+        <div class="recent-sessions" id="recentSessions" style="display:none">
+            <div class="bd-section" style="grid-column:1/-1;border-right:none">
+                <div class="bd-title">RECENT SESSIONS</div>
+                <table class="sessions-table" id="sessionsTable">
+                    <thead>
+                        <tr>
+                            <th>REQ ID</th>
+                            <th>CATEGORY</th>
+                            <th>SEVERITY</th>
+                            <th>LATENCY</th>
+                            <th>EXECUTED</th>
+                            <th>FEEDBACK</th>
+                            <th>FIX OK</th>
+                        </tr>
+                    </thead>
+                    <tbody id="sessionsTbody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+</main>
+
+<footer>
+    <span>AutoFixOps v2 — Powered by Claude claude-sonnet-4-20250514</span>
+    <span class="footer-sep">·</span>
+    <span>Dynamic LLM Reasoning · Execution Feedback Loop · Self-Healing Analysis</span>
+</footer>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────
+let currentAnalysis = null;
+let safeCommandsList = [];
+
+const EXAMPLES = [
+`Traceback (most recent call last):
+  File "server.py", line 3, in <module>
+    from fastapi import FastAPI
+ModuleNotFoundError: No module named 'fastapi'`,
+
+`docker: Error response from daemon: driver failed programming external
+connectivity on endpoint myapp_1 (a3f8d2c1):
+Bind for 0.0.0.0:5432 failed: port is already allocated.`,
+
+`npm ERR! code EACCES
+npm ERR! syscall access
+npm ERR! path /usr/local/lib/node_modules
+npm ERR! errno -13
+npm ERR! Error: EACCES: permission denied, access '/usr/local/lib/node_modules'`,
+
+`FATAL:  password authentication failed for user "dbadmin"
+pg_hba.conf rejects connection for host "172.18.0.1", user "dbadmin", database "production"`,
+];
+let exampleIdx = 0;
+
+// ── Health Check ───────────────────────────────────────────────────
+async function checkHealth() {
+    try {
+        const r = await fetch('/health');
+        const d = await r.json();
+        const badge = document.getElementById('aiStatus');
+        if (d.ai_enabled) {
+            badge.className = 'ai-badge online';
+            badge.innerHTML = `<span class="pulse-dot"></span><span class="ai-label">Claude AI Online</span>`;
+        } else {
+            badge.className = 'ai-badge offline';
+            badge.innerHTML = `<span class="ai-label">⚠ API Key Missing</span>`;
+        }
+    } catch {
+        document.getElementById('aiStatus').className = 'ai-badge offline';
+    }
+}
+
+// ── Main Analysis ──────────────────────────────────────────────────
+async function runAnalysis() {
+    const log = document.getElementById('logInput').value.trim();
+    const context = document.getElementById('contextInput').value.trim();
+    if (!log) { showError('Paste an error log first.'); return; }
+
+    setLoading(true);
+    hideError();
+    document.getElementById('results').classList.add('hidden');
+    document.getElementById('feedbackResult').classList.add('hidden');
+    document.getElementById('execResults').classList.add('hidden');
+
+    try {
+        const r = await fetch('/analyze', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ log, context, attempt_execution: false })
+        });
+        if (!r.ok) {
+            const err = await r.json();
+            throw new Error(err.detail || `Server error ${r.status}`);
+        }
+        const data = await r.json();
+        currentAnalysis = data;
+        renderResults(data);
+    } catch (e) {
+        showError(e.message);
+    } finally {
+        setLoading(false);
+    }
+}
+
+// ── Render Results ─────────────────────────────────────────────────
+function renderResults(d) {
+    // Meta strip
+    document.getElementById('rType').textContent = d.error_type;
+
+    const cat = document.getElementById('rCat');
+    cat.textContent = d.error_category.toUpperCase();
+    cat.className = `meta-val cat-badge cat-${d.error_category}`;
+
+    const sev = document.getElementById('rSev');
+    sev.textContent = d.severity.toUpperCase();
+    sev.className = `meta-val sev-badge sev-${d.severity}`;
+
+    document.getElementById('rConf').textContent = d.confidence;
+    document.getElementById('rModel').textContent = d.model_used || 'claude-sonnet-4-20250514';
+
+    // Reasoning trace — most important: shows this is REAL AI
+    const trace = document.getElementById('reasoningTrace');
+    if (d.reasoning_summary && d.reasoning_summary.length > 10) {
+        trace.textContent = d.reasoning_summary;
+    } else {
+        trace.textContent = 'No reasoning summary returned for this query.';
+    }
+
+    document.getElementById('rCause').textContent = d.root_cause;
+    document.getElementById('rExplain').textContent = d.explanation;
+
+    // Fix steps
+    const fixEl = document.getElementById('rFix');
+    fixEl.innerHTML = '';
+    (d.fix_steps || []).forEach(step => {
+        const li = document.createElement('li');
+        li.textContent = step;
+        fixEl.appendChild(li);
+    });
+
+    // Safe commands
+    const cmdEl = document.getElementById('rCommands');
+    cmdEl.innerHTML = '';
+    safeCommandsList = d.safe_commands || [];
+    if (safeCommandsList.length > 0) {
+        safeCommandsList.forEach(cmd => {
+            const div = document.createElement('div');
+            div.className = 'cmd-line';
+            div.innerHTML = `<span class="cmd-prompt">$</span><code>${escapeHtml(cmd)}</code>`;
+            cmdEl.appendChild(div);
+        });
+        document.getElementById('runSafeBtn').disabled = false;
+    } else {
+        cmdEl.innerHTML = '<p class="no-cmds">No safe diagnostic commands identified.</p>';
+        document.getElementById('runSafeBtn').disabled = true;
+    }
+
+    // Prevention
+    const prevEl = document.getElementById('rPrevention');
+    prevEl.innerHTML = '';
+    (d.prevention_tips || []).forEach(tip => {
+        const li = document.createElement('li');
+        li.textContent = tip;
+        prevEl.appendChild(li);
+    });
+
+    document.getElementById('results').classList.remove('hidden');
+    document.getElementById('results').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        refreshMetrics();
+}
+
+// ── Execute Safe Commands ──────────────────────────────────────────
+async function executeSafeCommands() {
+    if (!safeCommandsList.length) return;
+    const btn = document.getElementById('runSafeBtn');
+    btn.textContent = '▶ Running…';
+    btn.disabled = true;
+
+    try {
+        const r = await fetch('/execute', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ commands: safeCommandsList, safe_mode: true })
+        });
+        const results = await r.json();
+        renderExecResults(results);
+    } catch (e) {
+        showError('Execution failed: ' + e.message);
+    } finally {
+        btn.textContent = '▶ Run Diagnostics';
+        btn.disabled = false;
+    }
+}
+
+function renderExecResults(results) {
+    const el = document.getElementById('execResults');
+    el.innerHTML = '';
+    results.forEach(r => {
+        const div = document.createElement('div');
+        div.className = `exec-result ${r.exit_code === 0 ? 'exec-ok' : 'exec-err'}`;
+        div.innerHTML = `
+            <div class="exec-cmd">$ ${escapeHtml(r.command)}
+                <span class="exec-code ${r.exit_code === 0 ? 'code-ok' : 'code-err'}">exit ${r.exit_code}</span>
+            </div>
+            ${r.stdout ? `<pre class="exec-stdout">${escapeHtml(r.stdout)}</pre>` : ''}
+            ${r.stderr ? `<pre class="exec-stderr">${escapeHtml(r.stderr)}</pre>` : ''}
+        `;
+        el.appendChild(div);
+    });
+    el.classList.remove('hidden');
+}
+
+// ── Feedback Loop ──────────────────────────────────────────────────
+async function runFeedbackLoop() {
+    if (!currentAnalysis) { showError('Run an analysis first.'); return; }
+    const newLog = document.getElementById('newLogInput').value.trim();
+    if (!newLog) { showError('Paste the new output after your fix attempt.'); return; }
+
+    const btn = document.querySelector('.btn-feedback');
+    btn.textContent = '↻ Evaluating…';
+    btn.disabled = true;
+
+    try {
+        const r = await fetch('/feedback', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                original_log: document.getElementById('logInput').value,
+                applied_fix: (currentAnalysis.fix_steps || []).join('\n'),
+                new_log: newLog
+            })
+        });
+        const data = await r.json();
+        renderFeedback(data);
+    } catch (e) {
+        showError('Feedback evaluation failed: ' + e.message);
+    } finally {
+        btn.textContent = '↻ Evaluate Fix';
+        btn.disabled = false;
+    }
+}
+
+function renderFeedback(d) {
+    const el = document.getElementById('feedbackResult');
+    const worked = d.fix_worked;
+    el.className = `feedback-result ${worked ? 'feedback-ok' : 'feedback-fail'}`;
+    el.innerHTML = `
+        <div class="feedback-header">
+            ${worked ? '✅ Fix Verified by Claude' : '❌ Issue Persists — Claude Recommends:'}
+        </div>
+        <p class="feedback-analysis">${escapeHtml(d.analysis)}</p>
+        ${!worked ? `<ul class="feedback-steps">${(d.next_steps || []).map(s => `<li>${escapeHtml(s)}</li>`).join('')}</ul>` : ''}
+    `;
+    el.classList.remove('hidden');
+}
+
+// ── Utilities ──────────────────────────────────────────────────────
+function loadExample() {
+    document.getElementById('logInput').value = EXAMPLES[exampleIdx % EXAMPLES.length];
+    exampleIdx++;
+}
+
+function clearAll() {
+    document.getElementById('logInput').value = '';
+    document.getElementById('contextInput').value = '';
+    document.getElementById('newLogInput').value = '';
+    document.getElementById('results').classList.add('hidden');
+    document.getElementById('errorBanner').classList.add('hidden');
+    currentAnalysis = null;
+}
+
+function setLoading(on) {
+    const btn = document.getElementById('analyzeBtn');
+    btn.disabled = on;
+    document.getElementById('btnLabel').textContent = on ? 'Reasoning…' : 'Run Analysis';
+    document.getElementById('btnSpinner').classList.toggle('hidden', !on);
+}
+
+function showError(msg) {
+    document.getElementById('errorMsg').textContent = msg;
+    document.getElementById('errorBanner').classList.remove('hidden');
+}
+
+function hideError() {
+    document.getElementById('errorBanner').classList.add('hidden');
+}
+
+function escapeHtml(s) {
+    return String(s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
+// ── Init ───────────────────────────────────────────────────────────
+checkHealth();
+</script>
+</body>
+</html>
