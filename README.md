@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # ⚡ AutoFixOps — AI-Powered Environment Debugging Assistant
 
 A full-stack AI-assisted debugging platform using the **Anthropic Claude API** for dynamic
@@ -171,26 +170,6 @@ python -m uvicorn backend.main:app --reload --port 8000
 docker build -t autofixops .
 docker run -e ANTHROPIC_API_KEY=sk-ant-your-key-here -p 8000:8000 autofixops
 ```
-
-
----
-
-## Project Structure
-autofixops/
-├── backend/
-│   ├── main.py            # FastAPI app, routes, metrics wiring
-│   ├── claude_agent.py    # Anthropic API client, retry, fallbacks
-│   ├── executor.py        # Safe subprocess execution engine
-│   └── metrics.py         # In-process observability store
-├── frontend/
-│   ├── templates/
-│   │   └── index.html     # Single-page UI + live metrics dashboard
-│   └── static/
-│       └── style.css      # Industrial terminal aesthetic
-├── requirements.txt
-├── Dockerfile
-├── .env.example
-└── README.md
 
 ---
 
